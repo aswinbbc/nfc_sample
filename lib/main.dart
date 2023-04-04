@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:nfc_host_card_emulation/nfc_host_card_emulation.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'dart:convert' show utf8;
 
 import 'package:nfc_manager/platform_tags.dart';
+import 'package:nfc_sample/nfc_test.dart';
 
 /// Global flag if NFC is avalible
 bool isNfcAvalible = false;
@@ -13,7 +16,7 @@ bool isNfcAvalible = false;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Required for the line below
   isNfcAvalible = await NfcManager.instance.isAvailable();
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -26,7 +29,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter NFC Demo'),
+      home: const MyHomePage(title: 'title'),
     );
   }
 }
@@ -49,8 +52,18 @@ class _MyHomePageState extends State<MyHomePage> {
       if (!listenerRunning) {
         NfcManager.instance.startSession(
           onDiscovered: (NfcTag tag) async {
-            print({'@': tag.data});
+            print({'@#data': tag.data.toString()});
             _alert(tag.data.toString());
+
+            setState(() {
+              Map tagData = tag.data;
+              Map tagNdef = tagData['ndef'];
+              Map cachedMessage = tagNdef['cachedMessage'];
+              Map records = cachedMessage['records'][0];
+              Uint8List payload = records['payload'];
+              String payloadAsString = String.fromCharCodes(payload);
+              list.add(payloadAsString.substring(3));
+            });
           },
         );
       } else {
@@ -61,6 +74,38 @@ class _MyHomePageState extends State<MyHomePage> {
         listenerRunning = !listenerRunning;
       });
     }
+  }
+
+  void _ndefWrite() {
+    NfcManager.instance.startSession(onDiscovered: (NfcTag tag) async {
+      var ndef = Ndef.from(tag);
+      if (ndef == null || !ndef.isWritable) {
+        print('@#Tag is not ndef writable');
+        NfcManager.instance.stopSession();
+        return;
+      }
+
+      try {
+        NdefMessage message = NdefMessage([
+          // NdefRecord.createText(controller.text),
+          // NdefRecord.createUri(Uri.parse('https://flutter.dev')),
+          NdefRecord.createMime(
+              'text/plain', Uint8List.fromList(controller.text.codeUnits)),
+          // NdefRecord.createExternal(
+          //   'com.example',
+          //   'mytype',
+          //   Uint8List.fromList('mydata'.codeUnits),
+          // ),
+        ]);
+        await ndef.write(message);
+        print({'@#success': 'Success to "Ndef Write"'});
+        NfcManager.instance.stopSession();
+      } catch (e) {
+        print({'@#error': e});
+        NfcManager.instance.stopSession(errorMessage: e.toString());
+        return;
+      }
+    });
   }
 
   Future<void> _writeInNFC() {
@@ -84,28 +129,56 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   final TextEditingController _controller = TextEditingController();
+  final List list = [];
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(),
+      appBar: AppBar(actions: [
+        ElevatedButton(
+            onPressed: _listenForNFC,
+            child: Text(!listenerRunning ? 'start listen' : 'stop')),
+        ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => MyHceSreen(),
+                  ));
+            },
+            child: Text('host')),
+      ]),
       body: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text('NFC availability : $isNfcAvalible'),
-            Padding(
-              padding: const EdgeInsets.all(18.0),
-              child: TextField(
-                controller: _controller,
-                decoration: InputDecoration(hintText: 'Enter text here'),
+            // Row(
+            //   children: [
+            //     Expanded(
+            //       child: TextField(
+            //         controller: _controller,
+            //         decoration: InputDecoration(hintText: 'Enter text here'),
+            //       ),
+            //     ),
+            //     ElevatedButton(onPressed: _ndefWrite, child: Text('Write')),
+
+            //   ],
+            // ),
+            ElevatedButton(
+                onPressed: () {
+                  NfcHce.stream.listen((command) {
+                    print(command);
+                  });
+                },
+                child: Text('hce listen')),
+            Expanded(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: list.length,
+                itemBuilder: (context, index) =>
+                    ListTile(title: Text(list[index])),
               ),
             ),
-            ElevatedButton(
-                onPressed: _listenForNFC,
-                child: Text(!listenerRunning ? 'start listen' : 'stop')),
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              ElevatedButton(onPressed: _writeInNFC, child: Text('Write')),
-            ])
           ]),
     );
 
@@ -210,7 +283,8 @@ class _MyHomePageState extends State<MyHomePage> {
           //If the data could be converted we will get an object
           if (ndefTag != null) {
             //Create a 1Well known tag with en as language code and 0x02 encoding for UTF8
-            final ndefRecord = NdefRecord.createText(controller.text);
+            final ndefRecord =
+                NdefRecord.createText(controller.text, languageCode: 'en');
             //Create a new ndef message with a single record
             final ndefMessage = NdefMessage([ndefRecord]);
             //Write it to the tag, tag must still be "connected" to the device

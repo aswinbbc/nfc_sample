@@ -1,4 +1,3 @@
-
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -82,15 +81,15 @@ class _MyHomePageState extends State<MyHomePage> {
             onPressed: _listenForNFC,
             child: Text(!listenerRunning ? 'start listen' : 'stop'),
           ),
-          ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const MyHceSreen(),
-                    ));
-              },
-              child: const Text('host')),
+          // ElevatedButton(
+          //     onPressed: () {
+          //       Navigator.push(
+          //           context,
+          //           MaterialPageRoute(
+          //             builder: (context) => const MyHceSreen(),
+          //           ));
+          //     },
+          //     child: const Text('host')),
         ],
       ),
       body: Column(
@@ -98,20 +97,9 @@ class _MyHomePageState extends State<MyHomePage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text('NFC availability : $isNfcAvalible'),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  decoration:
-                      const InputDecoration(hintText: 'Enter text here'),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () {},
-                child: const Text('Write'),
-              ),
-            ],
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: MyHceSreen(),
           ),
           Expanded(
             child: ListView.builder(
